@@ -1,0 +1,422 @@
+# This Docker Compose file defines a set of services that make up a media management system.
+# The services include Sonarr, Radarr, QBittorrent, Sabnzbd, Nginx Proxy Manager,Ombi, Portainer, AudiobookShelf, Immich, Jellyseerr, Watchtower, Plex, Jellyfin, and Home Assistant.
+#
+# Each service is configured with environment variables, volume mounts, and port mappings to integrate it with the rest of the system.
+# The "env_file" field specifies that environment variables should be loaded from a ".env" file, which is likely used to store sensitive configuration details like usernames, passwords, and API keys.
+
+# Version specifies the version of the Docker Compose file format.
+
+
+# Services define the different containers that make up the system.
+services:
+
+  # Sonarr service
+  # This service runs the Sonarr application, which is a PVR for usenet and bittorrent users.
+  # It can monitor multiple RSS feeds for new episodes of your favorite shows and will grab, sort and rename them.
+  # It can also be configured to automatically upgrade the quality of files already downloaded when a better quality format becomes available.
+  sonarr:
+    # The image specifies the Docker image to use for this service.
+    image: lscr.io/linuxserver/sonarr
+    env_file: 
+      - .env
+    # The container_name specifies the name of the Docker container.
+    container_name: sonarr
+    # The environment section specifies the environment variables to set for the container.
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    # The volumes section specifies the volumes to mount inside the container.
+    volumes:
+      - ${DOCKERCONFIG}/sonarr:/config
+      - ${MEDIA}:/media
+    # The ports section specifies the ports to expose on the host machine.
+    ports:
+      - ${SONARR_PORT}:8989 # Public HTTP Port usually 8989 for Sonarr
+    # The restart policy specifies how the container should be restarted if it fails.
+    restart: unless-stopped
+
+  # Radarr service
+  # This service runs the Radarr application, which is a PVR (Personal Video Recorder) application that can monitor multiple RSS feeds for new movie releases and automatically download them.
+  # It can also be configured to upgrade the quality of existing movie files when a better quality version becomes available.
+  radarr:
+    image: lscr.io/linuxserver/radarr
+    env_file: 
+      - .env
+    container_name: radarr
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERCONFIG}/radarr:/config
+      - ${MEDIA}:/media
+    ports:
+      - ${RADARR_PORT}:7878 # Public HTTP Port usually 7878 for Radarr
+    restart: unless-stopped
+  
+  # QBittorrent service
+  # This service runs the QBittorrent application, which is a download client using the bittorrent protocol. (Piracy is illegal so like dont do it. Only download legal things with bittorrent, like linux distributions and software packages if you know what I mean)
+  qbit:
+    image: lscr.io/linuxserver/qbittorrent
+    env_file: 
+      - .env
+    container_name: qbit
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - WEBUI_PORT=8090
+    volumes:
+      - ${DOCKERCONFIG}/qbit/config:/config
+      - ${MEDIA}:/media
+    ports:
+      - ${QBIT_PORT}:8090 # Public HTTP Port usually 8090
+    restart: unless-stopped
+
+  # Sabnzbd service
+  # This service runs the Sabnzbd application, which is a NZB (Usenet) downloader.
+  # It can monitor RSS feeds for new NZB files and download them.
+  sabnzbd:
+    image: "linuxserver/sabnzbd"
+    env_file: 
+      - .env
+    container_name: sabnzbd #sabnzbd is the name of the container
+
+    volumes:
+      - ${DOCKERCONFIG}/sabnzbd/config:/config
+      - ${MEDIA}:/media
+    ports:
+      - ${SABNZBD_PORT}:8080 #Ublic HTTP Port usually 8080 is the port of the container
+    restart: always
+
+  # Nginx Proxy Manager service
+  # This service runs the Nginx Proxy Manager application, which is a web-based interface for managing reverse proxies and SSL/TLS certificates.
+  nginx-proxy:
+    container_name: nginx-proxy
+    image: 'jc21/nginx-proxy-manager:latest'
+    env_file: 
+      - .env
+    restart: unless-stopped
+    ports:
+      - ${NPM_HTTP_PORT}:80   # Public HTTP Port usually 80
+      - ${NPM_HTTPS_PORT}:443   # Public HTTPS Port usually 443
+      - ${NPM_ADMIN_PORT}:81   # Admin Web Port usually 81
+    volumes:
+      - ${DOCKERCONFIG}/nginx-proxy/data:/data
+      - ${DOCKERCONFIG}/nginx-proxy/letsencrypt:/etc/letsencrypt
+
+  # Ombi service
+  # This service runs the Ombi application, which is a web-based interface for requesting media content.
+  ombi:
+    image: lscr.io/linuxserver/ombi
+    env_file: 
+      - .env
+    container_name: ombi #ombi is the name of the container
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - BASE_URL=/ombi #optional
+    volumes:
+      - ${DOCKERCONFIG}/ombi/config:/config
+    ports:
+      - ${OMBIPORT}:3579   #3579 for ombi
+    restart: unless-stopped
+
+  # Portainer service
+  # This service runs the Portainer application, which is a web-based interface for managing Docker containers and resources.
+  # The service uses the 'cr.portainer.io/portainer/portainer-ce:2.9.3' Docker image and runs the Portainer container.
+  # The container is named based on the PORTAINER_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PORTAINER_DOCKER_API_PORT: The Docker API port to use in the container
+  #   - PORTAINER_PORT: The HTTP port to use in the container
+  # The service mounts the following volumes:
+  #   - /var/run/docker.sock:/var/run/docker.sock - The Docker socket to use in the container
+  #   - ${DOCKERCONFIG}/portainer/config:/data - The configuration directory for Portainer
+  portainer:
+    container_name: portainer-ce
+    image: 'cr.portainer.io/portainer/portainer-ce'
+    env_file: 
+      - .env
+    restart: unless-stopped
+    ports:
+      - ${PORTAINER_PORT}:9000   #Public HTTP Port usually 8000 for Portainer
+      - ${PORTAINER_DOCKER_API_PORT}:2375  #Public Docker API Port usually 2375 for the Docker API
+    labels:
+      - com.centurylinklabs.watchtower.enable=true #Enable watchtower to automatically update the image
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKERCONFIG}/portainer/config:/data
+
+  #AudioBookShelf service
+  # This service runs the AudioBookShelf application, which is a web-based interface for managing audio books.
+  # This service runs the AudioBookShelf application, which is a web-based interface for managing audio books.
+  # The service uses the 'ghcr.io/advplyr/audiobookshelf:latest' Docker image and runs the AudioBookShelf container.
+  # The container is named based on the AUDIOBOOKSHELF_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PUID: The user ID to run the container as
+  #   - PGID: The group ID to run the container as
+  #   - TZ: The timezone to use in the container
+  # The service mounts the following volumes:
+  #   - ${DOCKERCONFIG}/audiobookshelf/config: The configuration directory for AudioBookShelf
+  #   - ${MEDIA}: The media directory containing the audio books
+  #   - ${DOCKERCONFIG}/audiobookshelf/metadata: The metadata directory for AudioBookShelf
+  # The service exposes the AudioBookShelf HTTP port specified by the AUDIOBOOKSHELF_PORT environment variable.
+  # The service is set to restart unless it is manually stopped.
+  audiobookshelf:
+    image: 'ghcr.io/advplyr/audiobookshelf:latest'
+    env_file: 
+      - .env
+    container_name: AudioBookShelf #audiobookshelf is the name of the container
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    volumes:
+      - ${DOCKERCONFIG}/audiobookshelf/config:/config
+      - ${MEDIA}:/media
+      - ${DOCKERCONFIG}/audiobookshelf/metadata:/metadata
+    ports:
+      - ${AUDIOBOOKSHELF_PORT}:80 #Public HTTP Port usually 13378:80 for audiobookshelf
+
+    restart: unless-stopped
+
+  # Immich service
+  #
+  # This service runs the Immich application, which is a web-based interface for viewing and sharing images.
+  # The service uses the 'immich/immich:latest' Docker image and runs the Immich container.
+  # The container is named based on the IMMIH_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PUID: The user ID to run the container as
+  #   - PGID: The group ID to run the container as
+  #   - TZ: The timezone to use in the container
+  # The service mounts the following volumes:
+  #   - ${DOCKERCONFIG}/immich/config:/config
+  #   - ${DOCKERCONFIG}/immich/data:/data
+  immich-server:
+    container_name: immich_server
+    image: 'ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-release}'
+    # extends:
+    #   file: hwaccel.transcoding.yml
+    #   service: cpu # set to one of [nvenc, quicksync, rkmpp, vaapi, vaapi-wsl] for accelerated transcoding
+    volumes:
+      # Do not edit the next line. If you want to change the media storage location on your system, edit the value of UPLOAD_LOCATION in the .env file
+      - ${UPLOAD_LOCATION}:/usr/src/app/upload
+      - /etc/localtime:/etc/localtime:ro
+    env_file:
+      - .env
+    ports:
+      - ${IMMICH_PORT}:3001
+    depends_on:
+      - immich-redis
+      - immich-database
+    restart: always
+    healthcheck:
+      disable: false
+
+  immich-machine-learning:
+    container_name: immich_machine_learning
+    # For hardware acceleration, add one of -[armnn, cuda, openvino] to the image tag.
+    # Example tag: ${IMMICH_VERSION:-release}-cuda
+    image: 'ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-release}'
+    # extends: # uncomment this section for hardware acceleration - see https://immich.app/docs/features/ml-hardware-acceleration
+    #   file: immich/hwaccel.ml.yml
+    #   service: cpu # set to one of [armnn, cuda, openvino, openvino-wsl] for accelerated inference - use the `-wsl` version for WSL2 where applicable
+    volumes:
+      - model-cache:/cache
+    restart: always
+    healthcheck:
+      disable: false
+
+  immich-redis:
+    container_name: immich_redis
+    image: docker.io/redis:6.2-alpine@sha256:e3b17ba9479deec4b7d1eeec1548a253acc5374d68d3b27937fcfe4df8d18c7e
+    healthcheck:
+      test: redis-cli ping || exit 1
+    restart: always
+
+  immich-database:
+    container_name: immich_postgres
+    image: docker.io/tensorchord/pgvecto-rs:pg14-v0.2.0@sha256:90724186f0a3517cf6914295b5ab410db9ce23190a2d9d0b9dd6463e3fa298f0
+    environment:
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_USER: ${DB_USERNAME}
+      POSTGRES_DB: ${DB_DATABASE_NAME}
+      POSTGRES_INITDB_ARGS: '--data-checksums'
+    volumes:
+      # Do not edit the next line. If you want to change the database storage location on your system, edit the value of DB_DATA_LOCATION in the .env file
+      - ${DB_DATA_LOCATION}:/var/lib/postgresql/data
+    healthcheck:
+      test: pg_isready --dbname='${DB_DATABASE_NAME}' --username='${DB_USERNAME}' || exit 1; Chksum="$$(psql --dbname='${DB_DATABASE_NAME}' --username='${DB_USERNAME}' --tuples-only --no-align --command='SELECT COALESCE(SUM(checksum_failures), 0) FROM pg_stat_database')"; echo "checksum failure count is $$Chksum"; [ "$$Chksum" = '0' ] || exit 1
+      interval: 5m
+      start_interval: 30s
+      start_period: 5m
+    command: ["postgres", "-c", "shared_preload_libraries=vectors.so", "-c", 'search_path="$$user", public, vectors', "-c", "logging_collector=on", "-c", "max_wal_size=2GB", "-c", "shared_buffers=512MB", "-c", "wal_compression=on"]
+    restart: always
+
+  # Jellyseerr Service
+  #
+  # This service runs the Jellyseerr application, which is a web-based application for viewing and sharing music.
+  # The service uses the 'fallenbagel/jellyseerr:latest' Docker image and runs the Jellyseerr container.
+  # The container is named based on the JELLYSEERR_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PUID: The user ID to run the container as
+  #   - PGID: The group ID to run the container as
+  #   - TZ: The timezone to use in the container
+  # The service mounts the following volumes:
+  #   - ${DOCKERCONFIG}/jellyseerr/config/config:/app/config
+  # The service exposes the following ports:
+  #   - ${JELLYSEERR_PORT}: The public HTTP port, usually 5055 for Jellyseerr
+  # The service is set to restart unless stopped.
+  jellyseerr:
+    image: 'fallenbagel/jellyseerr:latest'
+    env_file: 
+      - .env
+    container_name: Jellyseerr #jellyseerr is the name of the container
+    volumes:
+      - ${DOCKERCONFIG}/jellyseerr/config/config:/app/config
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    ports:
+      - ${JELLYSEERR_PORT}:5055 #Public HTTP Port usually 5055 for jellyseerr
+    restart: unless-stopped
+
+  # Watchtower Service
+  #
+  # This service runs the Watchtower application, which is a service that automatically updates Docker images on a regular interval.
+  # The service uses the 'containrrr/watchtower:latest' Docker image and runs the Watchtower container.
+  # The container is named based on the WATCHTOWER_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PUID: The user ID to run the container as
+  #   - PGID: The group ID to run the container as
+  #   - TZ: The timezone to use in the container
+  # The service mounts the following volumes:
+  #   - /var/run/docker.sock:/var/run/docker.sock
+  # The service is set to restart unless stopped.
+  # Watchtower Service
+  #
+  # This service runs the Watchtower application, which is a service that automatically updates Docker images on a regular interval.
+  # The service uses the 'containrrr/watchtower:latest' Docker image and runs the Watchtower container.
+  # The container is named based on the WATCHTOWER_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PUID: The user ID to run the container as
+  #   - PGID: The group ID to run the container as
+  #   - TZ: The timezone to use in the container
+  #   - WATCHTOWER_HTTP_API_TOKEN: The API token for the Watchtower HTTP API
+  #   - WATCHTOWER_NOTIFICATIONS: The notification method to use (e.g. 'email')
+  #   - WATCHTOWER_NOTIFICATIONS_EMAIL_FROM: The email address to send notifications from
+  #   - WATCHTOWER_NOTIFICATIONS_EMAIL_TO: The email address to send notifications to
+  #   - WATCHTOWER_NOTIFICATIONS_EMAIL_SERVER: The email server hostname or IP address
+  #   - WATCHTOWER_NOTIFICATIONS_EMAIL_PORT: The email server port
+  #   - WATCHTOWER_NOTIFICATIONS_EMAIL_USER: The email server username
+  #   - WATCHTOWER_NOTIFICATIONS_EMAIL_PASSWORD: The email server password
+  # The service mounts the following volumes:
+  #   - /var/run/docker.sock:/var/run/docker.sock
+  # The service is set to restart unless stopped.
+  watchtower:
+    image: 'containrrr/watchtower:latest'
+    env_file: 
+      - .env
+    container_name: Watchtower #watchtower is the name of the container
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+    restart: unless-stopped #Restart the container if it stops
+
+  # Plex Service
+  #
+  # This service runs the Plex Media Server application, which is a media server for video and audio content.
+  # The service uses the 'plexinc/pms-docker:latest' Docker image and runs the Plex container.
+  # The container is named based on the PLEX_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PUID: The user ID to run the container as
+  #   - PGID: The group ID to run the container as
+  #   - TZ: The timezone to use in the container
+  #   - PLEX_CLAIM: The claim token for the Plex server
+  # The service mounts the following volumes:
+  #   - ${DOCKERCONFIG}/plex/config:/config
+  #   - ${MEDIA}:/media
+  # The service is set to restart unless it is manually stopped.
+  plex:
+    image: 'plexinc/pms-docker:latest'
+    env_file: 
+      - .env
+    container_name: Plex #plex is the name of the container
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - PLEX_CLAIM=${PLEX_CLAIM}
+    volumes:
+      - ${DOCKERCONFIG}/plex/config:/config
+      - ${MEDIA}:/media
+    ports:
+      - ${PLEX_PORT}:32400 #Public HTTP Port usually 32400 for Plex
+    restart: unless-stopped
+
+  # Jellyfin Service
+  #
+  # This service runs the Jellyfin Media Server application, which is a media server for video and audio content.
+  # The service uses the 'ghcr.io/jellyfin/jellyfin:latest' Docker image and runs the Jellyfin container.
+  # The container is named based on the JELLYFIN_INSTANCE_NAME environment variable.
+  # The service sets the following environment variables:
+  #   - PUID: The user ID to run the container as
+  #   - PGID: The group ID to run the container as
+  #   - TZ: The timezone to use in the container
+  #   - JELLYFIN_ADMIN_PASSWORD: The password for the Jellyfin admin user
+  # The service mounts the following volumes:
+  #   - ${DOCKERCONFIG}/jellyfin/config:/config
+  #   - ${MEDIA}:/media
+  # The service is set to restart unless it is manually stopped.
+  jellyfin:
+    image: 'ghcr.io/jellyfin/jellyfin:latest'
+    env_file: 
+      - .env
+    container_name: Jellyfin #jellyfin is the name of the container
+    environment:
+      - PUID=${PUID}
+      - PGID=${PGID}
+      - TZ=${TZ}
+      - JELLYFIN_ADMIN_PASSWORD=${JELLYFIN_ADMIN_PASSWORD}
+    volumes:
+      - ${DOCKERCONFIG}/jellyfin/config:/config
+      - ${MEDIA}:/media
+    ports:
+      - ${JELLYFIN_PORT}:8096 #Public HTTP Port usually 8096 for Jellyfin
+    restart: unless-stopped
+
+  # Home Assistant Service
+  #
+  # This service runs the Home Assistant application, which is a open source home automation platform.
+  # The service uses the "ghcr.io/home-assistant/home-assistant:stable" Docker image and runs the Home Assistant container.
+  # The container is named based on the HOMEASSISTANT_INSTANCE_NAME environment variable.
+  # The service wants a privileged container.
+  # The service mounts the following volumes:
+  #   - ${DOCKERCONFIG}/homeassistant/config:/config
+  #   - /etc/localtime:/etc/localtime:ro #Mount the system timezone
+  #   - /run/dbus:/run/dbus:ro #Mount the system dbus in read-only mode
+  # The service is set to restart unless it is manually stopped.
+  homeassistant:
+    image: "ghcr.io/home-assistant/home-assistant:stable"
+    env_file: 
+      - .env
+    container_name: HomeAssistant #homeassistant is the name of the container
+    privileged: true
+    ports:
+      - ${HASS_PORT}:8123 #Public HTTP Port usually 8123 for Home Assistant
+    volumes:
+      - ${DOCKERCONFIG}/homeassistant/config:/config
+      - /etc/localtime:/etc/localtime:ro
+      - /run/dbus:/run/dbus:ro
+   # devices:
+   #   - /dev/ttyUSB0:/dev/ttyUSB0 
+    restart: unless-stopped
+
+# Volume Mappings for services   
+volumes:
+  model-cache: # used by the immich-machine-learning service
